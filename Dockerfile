@@ -1,5 +1,8 @@
-FROM nginx:stable-alpine
+FROM node:21-alpine
 
-RUN apk add --no-cache curl
-
-EXPOSE 8080
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+EXPOSE 8000
+CMD ["npm", "start"]

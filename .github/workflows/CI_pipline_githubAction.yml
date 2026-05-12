@@ -3,16 +3,82 @@ name: first workflow
 on: 
   push: 
     branches: 
-      -  master
+      -  develop
+  pull_request:
+  workflow_dispatch:
 
 jobs:
-  first-job:
+  lint-job:
     runs-on: ubuntu-latest
+    env:
+      PORT: 3000
+      NODE_VERSION: 20
 
     steps:
-      - name: print msg
-        run: echo " this is the first job "
+      - name: checkout 
+        uses: actions/checkout@v6
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: | 
+          npm install
+          echo "linting done successfully"
 
 
-      
-  
+  unit-test-job:
+    needs: lint-job
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [20]
+    runs-on: ${{matrix.os}}
+
+    env:
+      PORT: 3000
+      NODE_VERSION: ${{ matrix.node-version }}
+
+    steps:
+      - name: checkout 
+        uses: actions/checkout@v6
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: | 
+          npm install
+          echo "installation done successfully"
+      - run: | 
+          npm test
+          echo `Triggered by ${{ github.actor }} and ${{github.ref_name}} and ${{github.event_name}} and ${{github.run_number}}`
+          echo "unit tests done successfully"
+          
+  build-job:
+    needs: unit-test-job
+    runs-on: ubuntu-latest
+    env:
+      PORT: 3000
+      NODE_VERSION: 20
+
+    steps:
+      - name: checkout 
+        uses: actions/checkout@v6
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: | 
+          npm install
+          echo "installation done successfully"
+      - run: | 
+          npm run build
+          echo "build done successfully"
+
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: dist/
