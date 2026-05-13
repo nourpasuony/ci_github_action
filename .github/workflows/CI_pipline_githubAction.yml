@@ -1,84 +1,138 @@
+# This is a sample workflow for a CI pipeline using GitHub Actions 
+# iam working on it to use all foundation for github action 
+
 name: first workflow
 
-on: 
-  push: 
-    branches: 
-      -  master
+on:
+  push:
+    branches:
+      - master
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint-job:
     runs-on: ubuntu-latest
+
     env:
       PORT: 3000
-      NODE_VERSION: 24
+      NODE_VERSION: 20
 
     steps:
-      - name: checkout 
-        uses: actions/checkout@v6
+      - name: checkout
+        uses: actions/checkout@v4
 
       - name: setup node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: | 
-          npm install
-          echo "linting done successfully"
+          cache: 'npm'
+
+      - name: install dependencies
+        run: npm ci
+
+      - name: run lint
+        run: npm run lint
 
 
   unit-test-job:
     needs: lint-job
+
+    runs-on: ubuntu-latest
+
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node-version: [24]
-    runs-on: ${{matrix.os}}
+        node-version: [18, 20]
 
     env:
       PORT: 3000
       NODE_VERSION: ${{ matrix.node-version }}
 
     steps:
-      - name: checkout 
-        uses: actions/checkout@v6
+      - name: checkout
+        uses: actions/checkout@v4
 
       - name: setup node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: | 
-          npm install
-          echo "installation done successfully"
-      - run: | 
-          npm test
-          echo `Triggered by ${{ github.actor }} and ${{github.ref_name}} and ${{github.event_name}} and ${{github.run_number}}`
-          echo "unit tests done successfully"
-          
+          cache: 'npm'
+
+      - name: install dependencies
+        run: npm i
+
+      - name: run tests
+        run: npm test
+
+      - name: show context
+        run: |
+          echo "Actor: ${{ github.actor }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run: ${{ github.run_number }}"
+
+
   build-job:
     needs: unit-test-job
+
     runs-on: ubuntu-latest
+
     env:
       PORT: 3000
-      NODE_VERSION: 24
+      NODE_VERSION: 20
 
     steps:
-      - name: checkout 
-        uses: actions/checkout@v6
+      - name: checkout
+        uses: actions/checkout@v4
 
       - name: setup node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: | 
-          npm install
-          echo "installation done successfully"
-      - run: | 
-          npm run build
-          echo "build done successfully"
+          cache: 'npm'
+
+      - name: install dependencies
+        run: npm i
+
+      - name: build project
+        run: npm run build
 
       - name: upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifact
           path: dist/
+
+
+  notify-job:
+    needs: [lint-job, unit-test-job, build-job]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: send email notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "CI Pipeline Result - ${{ github.repository }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: ci-system@github-actions.com
+          body: |
+            CI Pipeline Finished
+
+            Status: ${{ job.status }}
+
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Actor: ${{ github.actor }}
+            Event: ${{ github.event_name }}
+            Run Number: ${{ github.run_number }}
+            Commit: ${{ github.sha }}
